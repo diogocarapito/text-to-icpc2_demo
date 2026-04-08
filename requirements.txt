@@ -17,8 +17,6 @@ numpy==1.26.4
 torch
 scikit-learn
 
-# Supabase
-supabase==2.0.3
-python-dotenv==1.0.0
+psycopg2-binary==2.9.9
 
 pyperclip

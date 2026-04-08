@@ -27,7 +27,7 @@ def load_model(model_name, available_device):
     pipe = pipeline(
         "text-classification",
         model=model_name,
-        tokenizer="bert-base-uncased",
+        tokenizer="neuralmind/bert-base-portuguese-cased",
         device=available_device,
     )
     return pipe

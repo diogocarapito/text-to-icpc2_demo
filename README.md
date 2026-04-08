@@ -40,3 +40,46 @@ docker images
 ```bash
 docker run -p 8501:8501 app:latest
 ````
+
+
+#run test
+
+## Build images and start both containers in detached mode
+docker compose up --build -d
+
+## Check container status
+docker compose ps
+
+## Check logs (all services)
+docker compose logs
+
+## Check logs for a specific service
+docker compose logs app
+docker compose logs db
+
+## Test DB connection and insert from inside the app container
+docker compose exec app python -c "
+import os, psycopg2
+conn = psycopg2.connect(
+    host=os.environ.get('POSTGRES_HOST', 'localhost'),
+    dbname=os.environ.get('POSTGRES_DB', 'icpc2'),
+    user=os.environ.get('POSTGRES_USER', 'icpc2user'),
+    password=os.environ.get('POSTGRES_PASSWORD', ''),
+)
+print('Connected OK')
+"
+
+## List tables in the DB
+docker compose exec db psql -U icpc2user -d icpc2 -c "\dt"
+
+## Query the predictions table
+docker compose exec db psql -U icpc2user -d icpc2 -c "SELECT * FROM predictions;"
+
+## Rebuild and restart only the app (after code changes, without touching the db)
+docker compose up --build -d app
+
+## Stop everything
+docker compose down
+
+## Stop and wipe the DB volume (full reset)
+docker compose down -v

@@ -8,58 +8,47 @@ from utils.utils import (
 )
 import pyperclip
 import pandas as pd
-
 import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from datetime import datetime
-
 import re
+import psycopg2
 
 
-def load_supabase():
-    # load .env file
-    load_dotenv()
-
-    # get Supabase URL and Key from environment variables
-    url: str = os.environ.get("SUPABASE_URL")
-    key: str = os.environ.get("SUPABASE_KEY")
-    supabase_client: Client = create_client(url, key)
-
-    return supabase_client
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.environ.get("POSTGRES_HOST", "localhost"),
+        dbname=os.environ.get("POSTGRES_DB", "icpc2"),
+        user=os.environ.get("POSTGRES_USER", "icpc2user"),
+        password=os.environ.get("POSTGRES_PASSWORD", ""),
+    )
 
 
-# Load Supabase
-try:
-    supabase = load_supabase()
-except Exception as e:
-    print(f"Error loading Supabase: {e}")
-
-
-# Function to insert data into Supabase
-def supabase_insert(
-    text_input, predicted_text, predicted_code, predicted_lable, model, feedback, copy
+def db_insert(
+    text_input, predicted_text, predicted_code, predicted_label, model, feedback, copy
 ):
-    # Get current datetime
-    date_time = datetime.now().isoformat()
-
-    # Create the data in a format to be inserted into Supabase
-    sb_insert = {
-        "created_at": date_time,
-        "text_input": text_input,
-        "predicted_text": predicted_text,
-        "predicted_code": predicted_code,
-        "predicted_lable": predicted_lable,
-        "model": model,
-        "feedback": feedback,
-        "copy": copy,
-    }
-
     try:
-        # Insert data into Supabase
-        supabase.table("demo_text-to-icpc2").insert(sb_insert).execute()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO predictions
+                (text_input, predicted_text, predicted_code, predicted_label, model, feedback, copy)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                text_input,
+                predicted_text,
+                predicted_code,
+                predicted_label,
+                model,
+                feedback,
+                copy,
+            ),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
     except Exception as e:
-        print(f"Error inserting data into Supabase: {e}")
+        print(f"Error inserting into database: {e}")
 
 
 def demo_new():
@@ -74,7 +63,8 @@ def demo_new():
 
     # choose model
     # model_chosen = "text-to-icpc2_bert-base-uncased"
-    model_chosen = "text-to-icpc2"
+    # model_chosen = "text-to-icpc2"
+    model_chosen = "text-to-icpc2-bert-base-portuguese-cased"
 
     pipe = load_model(f"diogocarapito/{model_chosen}", available_device)
 
@@ -112,8 +102,8 @@ def demo_new():
             # Record the start time
             start_time = timeit.default_timer()
 
-            # Execute prediction
-            predictions = pipe(text)
+            # Execute prediction (top 5)
+            predictions = pipe(text, top_k=5)
 
             # Record the end time
             end_time = timeit.default_timer()
@@ -126,23 +116,31 @@ def demo_new():
                 f"Tempo necessário para classificação: **{elapsed_time:.4f} segundos** com **'{available_device}'**"
             )
 
-            # st.write(lable_code_dict)
-
+            valid_predictions = []
             for each in predictions:
-                # transform the lable into a icpc2 code
-                if each["label"].startswith("LABEL_"):
-                    # split on the "_" and get the 2nd part and make it integer
-                    each["label"] = int(each["label"].split("_")[1])
+                match_code = lable_code_dict.loc[
+                    lable_code_dict["code"] == each["label"], "code"
+                ]
+                match_text = lable_code_dict.loc[
+                    lable_code_dict["code"] == each["label"], "text"
+                ]
+                if match_code.empty or match_text.empty:
+                    continue
+                each["code"] = match_code.values[0]
+                each["text"] = match_text.values[0]
+                valid_predictions.append(each)
 
-                    # get the code
-                    each["code"] = lable_code_dict.loc[
-                        lable_code_dict["label"] == each["label"], "code"
-                    ].values[0]
+            predictions = valid_predictions
 
-                    # get the desctição
-                    each["text"] = lable_code_dict.loc[
-                        lable_code_dict["label"] == each["label"], "text"
-                    ].values[0]
+            st.subheader("Top 5 Previsões")
+            for i, each in enumerate(predictions):
+                st.write(
+                    f"**{i+1}. {each['code']} — {each['text']}** ({each['score']*100:.1f}%)"
+                )
+
+            if not predictions:
+                st.warning("Nenhuma previsão encontrada para o texto introduzido.")
+                return
 
             if "copy" not in st.session_state:
                 st.session_state["copy"] = False
@@ -157,8 +155,12 @@ def demo_new():
 
             with col_1:
                 if st.button("Copiar código", type="primary"):
-                    pyperclip.copy(predictions[0]["code"])
+                    try:
+                        pyperclip.copy(predictions[0]["code"])
+                    except Exception:
+                        pass
                     st.session_state["copy"] = True
+                    st.session_state["feedback"] = 2
 
             with col_2:
                 if st.button("👍", type="primary"):
@@ -171,12 +173,12 @@ def demo_new():
             # text_input, predicted_code, predicted_lable, model
             prediction_display(predictions, lables_dataframe)
 
-            supabase_insert(
-                text,  # text_input
-                predictions[0]["text"],  # predicted_text
-                predictions[0]["code"],  # predicted_code
-                predictions[0]["label"],  # predicted_lable
-                model_chosen,  # model
+            db_insert(
+                text,
+                predictions[0]["text"],
+                predictions[0]["code"],
+                predictions[0]["label"],
+                model_chosen,
                 st.session_state["feedback"],
                 st.session_state["copy"],
             )

@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
+# Install torch CPU-only first to keep image size small
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
 
