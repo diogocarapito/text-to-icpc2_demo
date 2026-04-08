@@ -83,3 +83,14 @@ docker compose down
 
 ## Stop and wipe the DB volume (full reset)
 docker compose down -v
+
+
+sudo apt update && sudo apt upgrade -y
+
+apt  install docker.io
+
+git clone https://github.com/diogocarapito/text-to-icpc2_demo
+
+cd text-to-icpc2_demo
+
+
