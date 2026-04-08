@@ -87,10 +87,22 @@ docker compose down -v
 
 sudo apt update && sudo apt upgrade -y
 
-apt  install docker.io
+apt install python3-pip
+
+apt install docker.io
+apt install docker-compose
 
 git clone https://github.com/diogocarapito/text-to-icpc2_demo
 
 cd text-to-icpc2_demo
 
+ufw allow 80
+ufw allow 443
+ufw status
 
+docker-compose run --entrypoint "certbot" certbot certonly \
+  --webroot -w /var/www/certbot \
+  --email you@email.com \
+  --agree-tos --no-eff-email \
+  -d text-to-icpc2.com \
+  -d www.text-to-icpc2.com
